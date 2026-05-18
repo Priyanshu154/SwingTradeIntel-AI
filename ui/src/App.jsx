@@ -1,20 +1,66 @@
+import { useState } from "react";
+
 export default function AISwingTradeChatbot() {
-  const messages = [
+  const [messages, setMessages] = useState([
     {
       role: "assistant",
       content:
         "Hello! Ask me about any stock for swing-trade analysis. Example: “Should I buy TCS for next 3 months?”",
     },
-    {
+  ]);
+
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleAnalyze = async () => {
+    if (!input.trim()) return;
+
+    const userMessage = {
       role: "user",
-      content: "Analyze Infosys for swing trade.",
-    },
-    {
-      role: "assistant",
-      content:
-        "Infosys currently shows moderately bullish momentum with improving sentiment in the IT sector. Suggested holding period: 1–3 months. Risk Level: Medium.",
-    },
-  ];
+      content: input,
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+    setLoading(true);
+
+    try {
+      const response = await fetch(
+        "https://your-api-gateway-url.amazonaws.com/prod/analyze",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            query: input,
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      const aiMessage = {
+        role: "assistant",
+        content: data.response,
+      };
+
+      setMessages((prev) => [...prev, aiMessage]);
+    } catch (error) {
+      console.error(error);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            "Something went wrong while analyzing the stock. Please try again.",
+        },
+      ]);
+    } finally {
+      setLoading(false);
+      setInput("");
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col">
@@ -151,12 +197,18 @@ export default function AISwingTradeChatbot() {
           <div className="border-t border-slate-800 p-4 bg-slate-950">
             <div className="max-w-5xl mx-auto flex items-center gap-3 bg-slate-900 border border-slate-800 rounded-2xl p-3 shadow-lg">
               <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
                 placeholder="Ask about a stock, sector, or swing-trade setup..."
                 className="flex-1 bg-transparent outline-none resize-none text-sm text-white placeholder:text-slate-500 min-h-[40px]"
               />
 
-              <button className="bg-indigo-600 hover:bg-indigo-500 transition px-5 py-3 rounded-xl font-medium">
-                Analyze
+              <button
+                onClick={handleAnalyze}
+                disabled={loading}
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 transition px-5 py-3 rounded-xl font-medium"
+              >
+                {loading ? "Analyzing..." : "Analyze"}
               </button>
             </div>
           </div>
