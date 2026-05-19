@@ -1,0 +1,112 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from mangum import Mangum
+import random
+
+app = FastAPI()
+
+# Allow frontend access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # frontend URL later
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+class AnalyzeRequest(BaseModel):
+    query: str
+
+
+@app.get("/")
+def health_check():
+    return {
+        "status": "ok",
+        "service": "ai-swing-trade-assistant"
+    }
+
+
+@app.post("/analyze")
+def analyze_stock(request: AnalyzeRequest):
+    ## Currently mocking response
+    query = request.query.lower()
+
+    bullish_keywords = [
+        "buy",
+        "bullish",
+        "uptrend",
+        "breakout",
+        "momentum",
+    ]
+
+    bearish_keywords = [
+        "sell",
+        "bearish",
+        "downtrend",
+        "weak",
+    ]
+
+    sentiment_score = 0
+
+    for keyword in bullish_keywords:
+        if keyword in query:
+            sentiment_score += 1
+
+    for keyword in bearish_keywords:
+        if keyword in query:
+            sentiment_score -= 1
+
+    if sentiment_score > 0:
+        verdict = "BUY"
+        sentiment = "Bullish"
+        holding_period = "1-3 months"
+    elif sentiment_score < 0:
+        verdict = "SELL"
+        sentiment = "Bearish"
+        holding_period = "1-2 weeks"
+    else:
+        verdict = "HOLD"
+        sentiment = "Neutral"
+        holding_period = "Wait for confirmation"
+
+    confidence = random.randint(65, 85)
+
+    technical_summary = (
+        "RSI indicates improving momentum while moving averages suggest moderate trend strength."
+    )
+
+    news_summary = (
+        "Recent market sentiment appears stable with moderate sector participation."
+    )
+
+    response_text = f'''
+Trade Verdict: {verdict}
+
+Market Sentiment: {sentiment}
+
+Suggested Holding Period: {holding_period}
+
+Confidence Score: {confidence}%
+
+Technical Analysis:
+{technical_summary}
+
+News Analysis:
+{news_summary}
+
+Final AI Thesis:
+Based on current technical momentum and recent sentiment signals, the stock shows a {sentiment.lower()} outlook for swing trading.
+'''
+
+    return {
+        "query": request.query,
+        "verdict": verdict,
+        "confidence": confidence,
+        "holding_period": holding_period,
+        "response": response_text.strip(),
+    }
+
+
+handler = Mangum(app)

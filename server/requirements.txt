@@ -1,0 +1,6 @@
+fastapi
+uvicorn[standard]
+mangum
+python-dotenv
+python-multipart
+pydantic
