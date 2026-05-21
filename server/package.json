@@ -1,0 +1,24 @@
+{
+  "name": "swingtradeintel-ai",
+  "version": "1.0.0",
+  "description": "AI Swing trade research assistance",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Priyanshu154/SwingTradeIntel-AI.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Priyanshu154/SwingTradeIntel-AI/issues"
+  },
+  "homepage": "https://github.com/Priyanshu154/SwingTradeIntel-AI#readme",
+  "devDependencies": {
+    "serverless-python-requirements": "^6.1.2"
+  }
+}

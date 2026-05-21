@@ -1,0 +1,27 @@
+service: ai-swing-trade-assistant
+
+frameworkVersion: "4"
+
+provider:
+  name: aws
+  runtime: python3.11
+  region: us-east-1
+  memorySize: 512
+  timeout: 30
+
+functions:
+  api:
+    handler: main.handler
+    events:
+      - httpApi: "*"
+
+plugins:
+  - serverless-python-requirements
+
+custom:
+  pythonRequirements:
+    dockerizePip: true
+
+package:
+  patterns:
+    - "!venv/**"
