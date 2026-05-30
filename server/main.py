@@ -1,8 +1,17 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from mangum import Mangum
 import random
+
+from auth import (
+    AuthResponse,
+    LoginRequest,
+    SignupRequest,
+    get_current_user,
+    login_user,
+    signup_user,
+)
 
 app = FastAPI()
 
@@ -26,6 +35,26 @@ def health_check():
         "status": "ok",
         "service": "ai-swing-trade-assistant"
     }
+
+
+@app.post("/auth/signup", response_model=AuthResponse)
+def auth_signup(request: SignupRequest):
+    return signup_user(request)
+
+
+@app.post("/auth/login", response_model=AuthResponse)
+def auth_login(request: LoginRequest):
+    return login_user(request)
+
+
+@app.post("/auth/logout")
+def auth_logout(_user: str = Depends(get_current_user)):
+    return {"message": "Logged out successfully"}
+
+
+@app.get("/auth/me")
+def auth_me(user: str = Depends(get_current_user)):
+    return {"email": user}
 
 
 @app.post("/analyze")

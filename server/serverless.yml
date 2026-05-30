@@ -8,6 +8,26 @@ provider:
   region: us-east-1
   memorySize: 512
   timeout: 30
+  environment:
+    DYNAMODB_TABLE: users
+    AWS_REGION: ${aws:region}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+          Resource:
+            - arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/users
+        - Effect: Allow
+          Action:
+            - ssm:GetParameter
+            - ssm:GetParameters
+          Resource:
+            - arn:aws:ssm:${aws:region}:${aws:accountId}:parameter/DB_ACCESS_KEY_ID
+            - arn:aws:ssm:${aws:region}:${aws:accountId}:parameter/DB_SECRET_ACCESS_KEY
+            - arn:aws:ssm:${aws:region}:${aws:accountId}:parameter/JWT_SECRET
 
 functions:
   api:

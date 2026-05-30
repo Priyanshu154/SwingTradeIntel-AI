@@ -77,6 +77,27 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
+Optional local config (non-secrets only; do not commit `.env`):
+
+```bash
+copy .env.example .env
+```
+
+Secrets (`JWT_SECRET`, DynamoDB access keys) are loaded from **AWS SSM Parameter Store** at startup. Ensure your AWS CLI profile (`aws configure`) can call `ssm:GetParameters` on:
+
+- `DB_ACCESS_KEY_ID`
+- `DB_SECRET_ACCESS_KEY`
+- `JWT_SECRET`
+
+Optional `.env` keys: `AWS_REGION`, `DYNAMODB_TABLE` (default `users`).
+
+Auth API (DynamoDB table `users`, partition key `email`):
+
+- `POST /auth/signup` — create account (bcrypt-hashed password)
+- `POST /auth/login` — returns JWT
+- `POST /auth/logout` — requires `Authorization: Bearer <token>`
+- `GET /auth/me` — validate session
+
 Start FastAPI:
 
 ```bash

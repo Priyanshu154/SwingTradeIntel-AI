@@ -1,6 +1,6 @@
 import { useState } from "react";
-
-const BACKEND_URL = "http://localhost:8000"; // Replace with your API Gateway URL in production
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "./context/AuthContext";
 
 const SENTIMENT_COLOR = {
   Bullish: "text-emerald-400",
@@ -21,6 +21,8 @@ const DEFAULT_INSIGHT = {
 };
 
 export default function AISwingTradeChatbot() {
+  const navigate = useNavigate();
+  const { email, logout, authFetch } = useAuth();
   const [messages, setMessages] = useState([
     {
       role: "assistant",
@@ -41,9 +43,8 @@ export default function AISwingTradeChatbot() {
     setInput("");
 
     try {
-      const response = await fetch(`${BACKEND_URL}/analyze`, {
+      const response = await authFetch("/analyze", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ query }),
       });
 
@@ -106,9 +107,22 @@ export default function AISwingTradeChatbot() {
         </div>
 
         <div className="flex items-center gap-3">
+          {email && (
+            <span className="text-sm text-slate-400 hidden sm:inline">{email}</span>
+          )}
           <div className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-sm border border-emerald-500/20">
             Bedrock Connected
           </div>
+          <button
+            type="button"
+            onClick={async () => {
+              await logout();
+              navigate("/login", { replace: true });
+            }}
+            className="px-4 py-2 rounded-xl border border-slate-700 hover:border-slate-500 hover:bg-slate-800 transition text-sm"
+          >
+            Log out
+          </button>
         </div>
       </header>
 
