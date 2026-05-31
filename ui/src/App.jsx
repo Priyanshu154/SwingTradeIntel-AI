@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "./context/AuthContext";
 
@@ -20,19 +20,70 @@ const DEFAULT_INSIGHT = {
   holding_period: "2–4 Months",
 };
 
+const WELCOME_MESSAGE = {
+  role: "assistant",
+  content: `Hello! Ask me about any stock for swing-trade analysis. Example: "Should I buy TCS for next 3 months?"`,
+};
+
+const SENTIMENT_MAP = {
+  BUY: "Bullish",
+  SELL: "Bearish",
+  HOLD: "Neutral",
+};
+
+function conversationsToMessages(conversations) {
+  const messages = [WELCOME_MESSAGE];
+  for (const item of conversations) {
+    messages.push({ role: "user", content: item.user_query });
+    messages.push({ role: "assistant", content: item.ai_response });
+  }
+  return messages;
+}
+
 export default function AISwingTradeChatbot() {
   const navigate = useNavigate();
   const { email, logout, authFetch } = useAuth();
-  const [messages, setMessages] = useState([
-    {
-      role: "assistant",
-      content: `Hello! Ask me about any stock for swing-trade analysis. Example: "Should I buy TCS for next 3 months?"`,
-    },
-  ]);
+  const [messages, setMessages] = useState([WELCOME_MESSAGE]);
 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [insight, setInsight] = useState(DEFAULT_INSIGHT);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadHistory() {
+      try {
+        const response = await authFetch("/chat/history");
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const conversations = data.conversations ?? [];
+        if (cancelled || conversations.length === 0) return;
+
+        setMessages(conversationsToMessages(conversations));
+
+        const last = conversations[conversations.length - 1];
+        setInsight({
+          sentiment: SENTIMENT_MAP[last.verdict] ?? "Neutral",
+          confidence: last.confidence ?? DEFAULT_INSIGHT.confidence,
+          holding_period: last.holding_period ?? "N/A",
+        });
+      } catch (error) {
+        console.error(error);
+      } finally {
+        if (!cancelled) {
+          setHistoryLoading(false);
+        }
+      }
+    }
+
+    loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [authFetch]);
 
   const handleAnalyze = async (query = input) => {
     if (!query.trim()) return;
@@ -54,15 +105,8 @@ export default function AISwingTradeChatbot() {
 
       const data = await response.json();
 
-      // Update top insight cards from response
-      const sentimentMap = {
-        BUY: "Bullish",
-        SELL: "Bearish",
-        HOLD: "Neutral",
-      };
-
       setInsight({
-        sentiment: sentimentMap[data.verdict] ?? "Neutral",
+        sentiment: SENTIMENT_MAP[data.verdict] ?? "Neutral",
         confidence: data.confidence,
         holding_period: data.holding_period ?? "N/A",
       });
@@ -205,6 +249,11 @@ export default function AISwingTradeChatbot() {
 
           {/* Chat Messages */}
           <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
+            {historyLoading && (
+              <p className="text-center text-sm text-slate-500">
+                Loading conversation history...
+              </p>
+            )}
             {messages.map((message, idx) => (
               <div
                 key={idx}

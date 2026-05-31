@@ -1,5 +1,4 @@
 import os
-import boto3
 import jwt
 from botocore.exceptions import ClientError
 from fastapi import Depends, HTTPException, status
@@ -7,6 +6,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field
 
+from db import dynamodb_table
 from ssm_secrets import get_secret
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -22,13 +22,7 @@ def _jwt_secret() -> str:
 
 
 def _dynamodb_table():
-    resource = boto3.resource(
-        "dynamodb",
-        region_name=AWS_REGION,
-        aws_access_key_id=get_secret("AWS_ACCESS_KEY_ID"),
-        aws_secret_access_key=get_secret("AWS_SECRET_ACCESS_KEY"),
-    )
-    return resource.Table(TABLE_NAME)
+    return dynamodb_table(TABLE_NAME)
 
 
 def hash_password(password: str) -> str:

@@ -12,6 +12,7 @@ from auth import (
     login_user,
     signup_user,
 )
+from chat_history import list_conversations, save_conversation
 
 app = FastAPI()
 
@@ -57,8 +58,17 @@ def auth_me(user: str = Depends(get_current_user)):
     return {"email": user}
 
 
+@app.get("/chat/history")
+def chat_history(user: str = Depends(get_current_user)):
+    items = list_conversations(user)
+    return {"conversations": items}
+
+
 @app.post("/analyze")
-def analyze_stock(request: AnalyzeRequest):
+def analyze_stock(
+    request: AnalyzeRequest,
+    user: str = Depends(get_current_user),
+):
     ## Currently mocking response
     query = request.query.lower()
 
@@ -129,12 +139,23 @@ Final AI Thesis:
 Based on current technical momentum and recent sentiment signals, the stock shows a {sentiment.lower()} outlook for swing trading.
 '''
 
+    response_body = response_text.strip()
+
+    save_conversation(
+        user,
+        request.query,
+        response_body,
+        verdict=verdict,
+        confidence=confidence,
+        holding_period=holding_period,
+    )
+
     return {
         "query": request.query,
         "verdict": verdict,
         "confidence": confidence,
         "holding_period": holding_period,
-        "response": response_text.strip(),
+        "response": response_body,
     }
 
 
