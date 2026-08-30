@@ -12,9 +12,6 @@ node_modules/
 .vscode/
 .idea/
 
-#serverless
-.serverless/
-
 # Environment (secrets)
 .env
 server/.env

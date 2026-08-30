@@ -3,9 +3,8 @@
 ## Prerequisites
 
 - Python 3.11+
-- Node.js 18+
+- Node.js 18+ (frontend only)
 - AWS CLI
-- Docker Desktop
 
 Configure AWS credentials:
 
@@ -121,71 +120,4 @@ Swagger UI:
 
 ```text
 http://127.0.0.1:8000/docs
-```
-
----
-
-## Serverless Deployment
-
-Navigate to backend directory:
-
-```bash
-cd server
-```
-
-Install Node dependencies (first time only):
-
-```bash
-npm install
-```
-
-Ensure Docker Desktop is running:
-
-```bash
-docker ps
-```
-
-Deploy (by default creates both `users` and `conversations` DynamoDB tables):
-
-```bash
-npx serverless deploy
-```
-
-Create tables one at a time when one already exists outside the stack:
-
-```bash
-# Only users table already exists — create conversations table
-CREATE_USERS_TABLE=false CREATE_CONVERSATIONS_TABLE=true npx serverless deploy
-
-# Only conversations table already exists — create users table
-CREATE_USERS_TABLE=true CREATE_CONVERSATIONS_TABLE=false npx serverless deploy
-
-# Both tables already exist — skip table resources
-CREATE_USERS_TABLE=false CREATE_CONVERSATIONS_TABLE=false npx serverless deploy
-```
-
-PowerShell:
-
-```powershell
-$env:CREATE_USERS_TABLE="false"; $env:CREATE_CONVERSATIONS_TABLE="true"; npx serverless deploy
-```
-
-Tables use `DeletionPolicy: Retain` so data is kept if you remove the stack. If a table exists outside CloudFormation, set its flag to `false` or [import it into the stack](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resource-import.html).
-
-Force redeploy:
-
-```bash
-npx serverless deploy --force
-```
-
-View logs:
-
-```bash
-npx serverless logs -f api --tail
-```
-
-Remove deployed resources:
-
-```bash
-npx serverless remove
 ```
