@@ -1,0 +1,7 @@
+# Packaged into Lambdas as manylinux2014_aarch64 wheels (see serverless.yml).
+# boto3 is provided by the Lambda runtime — do not pin it here.
+yfinance>=0.2.40
+pandas>=2.2.0,<3
+numpy>=1.26.0,<3
+langgraph>=0.2.55,<0.4
+langchain-core>=0.3.0,<0.4

@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+.python-version
+
+# Node
+node_modules/
+.serverless/
+.requirements/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment / secrets
+.env
+backend/.env
+frontend/.env
+server/.env
+ui/.env
+
+# Build
+frontend/dist/
+ui/dist/
+
+# Legacy dirs (locked venv/node_modules — delete locally after closing terminals)
+server/
+ui/
