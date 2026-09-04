@@ -44,9 +44,9 @@ scripts/     Deploy-profile helpers (SSM → local AWS CLI profile)
 - Python 3.11+ (local testing only)
 - AWS CLI + Serverless Framework v3
 - Bedrock model access in `us-east-1` for:
-  - `anthropic.claude-3-haiku-20240307-v1:0`
-  - `anthropic.claude-3-5-sonnet-20240620-v1:0`
-  - `amazon.titan-embed-text-v2:0`
+  - `amazon.nova-micro-v1:0` (specialist agents)
+  - `amazon.nova-pro-v1:0` (judge)
+  - `amazon.titan-embed-text-v2:0` (news RAG embeddings)
 - SSM parameters (SecureString):
   - `/IAM_ACCESS_KEY` and `/IAM_SECRET_ACCESS` — **deploy-time IAM user only**
   - `/DEMO_API_KEY` — shared secret checked by the orchestrator
@@ -120,15 +120,15 @@ npm run dev
 
 Open http://127.0.0.1:5173 — cosmetic login accepts any email/password; API auth is the `x-demo-key` header only.
 
-### Bedrock models on this account
+### Bedrock models
 
-Claude Haiku/Sonnet Marketplace access hits `INVALID_PAYMENT_INSTRUMENT` here, so the deploy uses:
+Deployed model IDs (set in `backend/serverless.yml`):
 
 - Specialists → `amazon.nova-micro-v1:0`
 - Judge → `amazon.nova-pro-v1:0`
 - Embeddings → `amazon.titan-embed-text-v2:0`
 
-After adding a payment method in AWS Marketplace / Bedrock model access, you can switch env vars back to Claude IDs in `backend/serverless.yml`.
+Claude Haiku/Sonnet are Marketplace-gated on this account (`INVALID_PAYMENT_INSTRUMENT`). After adding a payment method in AWS Marketplace / Bedrock model access, you can optionally switch the env vars to Claude IDs.
 
 ## API contract
 
@@ -142,7 +142,7 @@ After adding a payment method in AWS Marketplace / Bedrock model access, you can
 
 ## Cost / scale notes
 
-Kept cheap on purpose: HTTP API, on-demand DynamoDB, arm64 Lambdas, no NAT, no CloudFront, no Cognito, no managed vector DB. Haiku for specialists, Sonnet only for the Judge. Shared-secret header gates the public demo.
+Kept cheap on purpose: HTTP API, on-demand DynamoDB, arm64 Lambdas, no NAT, no CloudFront, no Cognito, no managed vector DB. Nova Micro for specialists, Nova Pro for the Judge, Titan Embeddings V2 for RAG. Shared-secret header gates the public demo.
 
 **If this ever needs real traffic, add back in this order:** Step Functions (durable orchestration) → Cognito (real users) → managed vector store / Bedrock Knowledge Bases.
 
