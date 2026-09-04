@@ -3,9 +3,10 @@ import { Navigate, useNavigate } from "react-router-dom";
 import AuthForm from "../components/AuthForm";
 import { useAuth } from "../context/AuthContext";
 
-export default function Login() {
+/** Cosmetic signup — mirrors login; stores nothing server-side. */
+export default function Signup() {
   const navigate = useNavigate();
-  const { login, isAuthenticated, loading: authLoading } = useAuth();
+  const { signup, isAuthenticated, loading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -19,9 +20,8 @@ export default function Login() {
     e.preventDefault();
     setError("");
     setLoading(true);
-
     try {
-      await login(email, password);
+      await signup(email, password);
       navigate("/", { replace: true });
     } catch (err) {
       setError(err.message);
@@ -32,14 +32,14 @@ export default function Login() {
 
   return (
     <AuthForm
-      title="Welcome back"
-      subtitle="Sign in to access the AI Swing Trade Assistant"
-      submitLabel="Sign in"
+      title="Create demo profile"
+      subtitle="Local unlock only — no accounts are created on the server"
+      submitLabel="Continue"
       loading={loading}
       error={error}
-      alternateText="Don't have an account?"
-      alternateLink="/signup"
-      alternateLabel="Create account"
+      alternateText="Already unlocked?"
+      alternateLink="/login"
+      alternateLabel="Sign in"
       onSubmit={handleSubmit}
     >
       <label className="block">
@@ -59,11 +59,11 @@ export default function Login() {
         <input
           type="password"
           required
-          minLength={6}
+          minLength={1}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="mt-1 w-full rounded-xl bg-slate-950 border border-slate-700 px-4 py-3 outline-none focus:border-indigo-500"
-          placeholder="••••••••"
+          placeholder="any password for demo"
         />
       </label>
     </AuthForm>

@@ -1,123 +1,154 @@
 # AI Swing Trade Assistant
 
+Portfolio/demo multi-agent serverless RAG app for Nifty 50 swing-trade queries.
+A React SPA calls an API Gateway → Orchestrator Lambda that invokes News, Technical,
+and Fundamental specialist agents, then a Judge agent (Claude Sonnet) returns a
+structured verdict. Weekly EventBridge job embeds ticker news into S3 for hand-rolled RAG.
+
+> Not production auth. The login screen is cosmetic; the only real gate is a shared
+> `x-demo-key` header protecting Bedrock spend on a public resume demo link.
+
+## Architecture
+
+```mermaid
+flowchart TD
+  UI["React SPA<br/>S3 static website"] -->|x-demo-key| APIGW["API Gateway HTTP API"]
+  APIGW --> Orch["Orchestrator Lambda"]
+  Orch --> A1["Agent 1 News RAG<br/>Haiku"]
+  Orch --> A2["Agent 2 Technical<br/>Haiku + pandas layer"]
+  Orch --> A3["Agent 3 Fundamental<br/>Haiku"]
+  A1 --> Judge["Judge Agent<br/>Sonnet"]
+  A2 --> Judge
+  A3 --> Judge
+  Judge --> DDB["ChatSessions DynamoDB"]
+  Judge --> UI
+  A2 --> Cache["AnalysisCache DynamoDB"]
+  A3 --> Cache
+  EB["EventBridge weekly cron"] --> Ingest["News Ingestion Lambda"]
+  Ingest --> S3["S3 news/{ticker}.json<br/>Titan embeddings"]
+  A1 --> S3
+```
+
+## Repo layout
+
+```text
+backend/     Serverless Framework (Python 3.11 arm64 Lambdas)
+frontend/    React + Vite + Tailwind SPA
+scripts/     Deploy-profile helpers (SSM → local AWS CLI profile)
+```
+
 ## Prerequisites
 
-- Python 3.11+
-- Node.js 18+ (frontend only)
-- AWS CLI
+- Node.js 18+
+- Python 3.11+ (local testing only)
+- AWS CLI + Serverless Framework v3
+- Bedrock model access in `us-east-1` for:
+  - `anthropic.claude-3-haiku-20240307-v1:0`
+  - `anthropic.claude-3-5-sonnet-20240620-v1:0`
+  - `amazon.titan-embed-text-v2:0`
+- SSM parameters (SecureString):
+  - `/IAM_ACCESS_KEY` and `/IAM_SECRET_ACCESS` — **deploy-time IAM user only**
+  - `/DEMO_API_KEY` — shared secret checked by the orchestrator
 
-Configure AWS credentials:
+## 1. Configure deploy credentials from SSM
 
-```bash
-aws configure
+Do **not** put these keys in Lambda environment variables. They configure a local CLI profile:
+
+```powershell
+# PowerShell
+.\scripts\setup-deploy-profile.ps1
 ```
 
----
-
-## Frontend Setup (UI)
-
-Navigate to UI directory:
-
 ```bash
-cd ui
+# bash
+chmod +x scripts/setup-deploy-profile.sh
+./scripts/setup-deploy-profile.sh
 ```
 
-Install dependencies:
+## 2. Deploy backend
 
 ```bash
+cd backend
 npm install
+copy .env.example .env   # set DEMO_API_KEY (or rely on SSM /DEMO_API_KEY)
+# Windows PowerShell:
+$env:AWS_PROFILE="swingtrade-deploy"
+$env:DEMO_API_KEY="your-shared-secret"
+npm run deploy
 ```
 
-Start development server:
+Note the outputs: `HttpApiUrl`, `FrontendBucketName`, `FrontendWebsiteUrl`.
+
+Optional: run a one-off news ingest for a few tickers before Sunday cron:
 
 ```bash
+npx serverless invoke -f ingestNews -d "{\"tickers\":[\"TCS.NS\",\"RELIANCE.NS\",\"INFY.NS\",\"HDFCBANK.NS\",\"SBIN.NS\"]}"
+```
+
+## 3. Deploy frontend
+
+```bash
+cd frontend
+npm install
+copy .env.example .env
+# Set VITE_BACKEND_URL to HttpApiUrl (no trailing slash)
+# Set VITE_DEMO_API_KEY to the same shared secret
+npm run build
+
+# Upload dist/ to the FrontendBucket from stack outputs
+aws s3 sync dist/ s3://FRONTEND_BUCKET_NAME/ --delete --profile swingtrade-deploy
+```
+
+Open the `FrontendWebsiteUrl` (HTTP S3 website endpoint). Add CloudFront later only if you need HTTPS/custom domain.
+
+## Local e2e (already deployed)
+
+Backend is live in `us-east-1`. Point the Vite app at the **Function URL** (supports >30s; HTTP API may time out):
+
+```text
+Function URL: https://qbu4ie2nmpgblejrjaydw7rlkq0csvgi.lambda-url.us-east-1.on.aws
+HTTP API:     https://1t7speb8r7.execute-api.us-east-1.amazonaws.com
+```
+
+```powershell
+cd frontend
+# .env already wired to Function URL + SSM /DEMO_API_KEY
+npm install
 npm run dev
 ```
 
-Frontend URL:
+Open http://127.0.0.1:5173 — cosmetic login accepts any email/password; API auth is the `x-demo-key` header only.
 
-```text
-http://localhost:5173
+### Bedrock models on this account
+
+Claude Haiku/Sonnet Marketplace access hits `INVALID_PAYMENT_INSTRUMENT` here, so the deploy uses:
+
+- Specialists → `amazon.nova-micro-v1:0`
+- Judge → `amazon.nova-pro-v1:0`
+- Embeddings → `amazon.titan-embed-text-v2:0`
+
+After adding a payment method in AWS Marketplace / Bedrock model access, you can switch env vars back to Claude IDs in `backend/serverless.yml`.
+
+## API contract
+
+`POST /analyze` — header `x-demo-key: <secret>`
+
+```json
+{ "query": "Should I buy TCS for next 3 months?", "ticker": "TCS" }
 ```
 
----
+`GET /history` — same header; returns recent `ChatSessions` for the demo user.
 
-## Backend Setup (FastAPI)
+## Cost / scale notes
 
-Navigate to backend directory:
+Kept cheap on purpose: HTTP API, on-demand DynamoDB, arm64 Lambdas, no NAT, no CloudFront, no Cognito, no managed vector DB. Haiku for specialists, Sonnet only for the Judge. Shared-secret header gates the public demo.
 
-```bash
-cd server
-```
+**If this ever needs real traffic, add back in this order:** Step Functions (orchestration reliability) → Cognito (real users) → managed vector store / Bedrock Knowledge Bases.
 
-Create virtual environment (first time only):
+## yfinance fragility
 
-```bash
-python -m venv venv
-```
+Yahoo rate-limits under bursty access. Mitigations baked in: DynamoDB analysis cache (24h technical / 7d fundamental), sequential weekly ingest with delay, retry/backoff, stale-cache fallback.
 
-Activate virtual environment:
+## Legacy cleanup
 
-### Windows CMD
-
-```cmd
-venv\Scripts\activate
-```
-
-### PowerShell
-
-```powershell
-.\venv\Scripts\Activate.ps1
-```
-
-Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-Optional local config (non-secrets only; do not commit `.env`):
-
-```bash
-copy .env.example .env
-```
-
-Secrets (`JWT_SECRET`, DynamoDB access keys) are loaded from **AWS SSM Parameter Store** at startup. Ensure your AWS CLI profile (`aws configure`) can call `ssm:GetParameters` on:
-
-- `DB_ACCESS_KEY_ID`
-- `DB_SECRET_ACCESS_KEY`
-- `JWT_SECRET`
-
-Optional `.env` keys: `AWS_REGION`, `DYNAMODB_TABLE` (default `users`), `CHAT_DYNAMODB_TABLE` (default `conversations`).
-
-Create the `conversations` DynamoDB table (partition key `user_email`, sort key `conversation_id`, both strings).
-
-Auth API (DynamoDB table `users`, partition key `email`):
-
-- `POST /auth/signup` — create account (bcrypt-hashed password)
-- `POST /auth/login` — returns JWT
-- `POST /auth/logout` — requires `Authorization: Bearer <token>`
-- `GET /auth/me` — validate session
-
-Chat API (DynamoDB table `conversations`; requires JWT):
-
-- `POST /analyze` — analyze a stock query; saves user query and AI response for the logged-in user
-- `GET /chat/history` — list saved conversations for the logged-in user
-
-Start FastAPI:
-
-```bash
-uvicorn main:app --reload
-```
-
-Backend URL:
-
-```text
-http://127.0.0.1:8000
-```
-
-Swagger UI:
-
-```text
-http://127.0.0.1:8000/docs
-```
+If you still see local `server/` or `ui/` folders, they are leftovers from the old FastAPI/JWT prototype (locked by `venv` / `node_modules`). Close any terminals using them, then delete those directories — the active code lives in `backend/` and `frontend/`.

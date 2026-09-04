@@ -1,0 +1,284 @@
+service: swingtradeintel
+
+frameworkVersion: "3"
+
+provider:
+  name: aws
+  runtime: python3.11
+  architecture: arm64
+  region: ${opt:region, 'us-east-1'}
+  stage: ${opt:stage, 'dev'}
+  memorySize: 512
+  timeout: 60
+  environment:
+    STAGE: ${self:provider.stage}
+    NEWS_BUCKET: !Ref NewsBucket
+    ANALYSIS_CACHE_TABLE: !Ref AnalysisCacheTable
+    CHAT_SESSIONS_TABLE: !Ref ChatSessionsTable
+    DEMO_API_KEY: ${env:DEMO_API_KEY, ssm:/DEMO_API_KEY~true}
+    # Direct model IDs (us.* inference profiles can route cross-region and need broader IAM)
+    BEDROCK_HAIKU_MODEL: amazon.nova-micro-v1:0
+    # Claude Sonnet needs Marketplace payment instrument on this account; Nova Pro is the active judge stand-in
+    BEDROCK_SONNET_MODEL: amazon.nova-pro-v1:0
+    BEDROCK_EMBED_MODEL: amazon.titan-embed-text-v2:0
+  httpApi:
+    cors:
+      allowedOrigins:
+        - "*"
+      allowedHeaders:
+        - Content-Type
+        - x-demo-key
+      allowedMethods:
+        - GET
+        - POST
+        - OPTIONS
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - bedrock:InvokeModel
+          Resource:
+            - arn:aws:bedrock:*::foundation-model/*
+            - !Sub "arn:aws:bedrock:*:${AWS::AccountId}:inference-profile/*"
+        - Effect: Allow
+          Action:
+            - aws-marketplace:ViewSubscriptions
+            - aws-marketplace:Subscribe
+          Resource: "*"
+        - Effect: Allow
+          Action:
+            - s3:GetObject
+            - s3:PutObject
+            - s3:ListBucket
+          Resource:
+            - !GetAtt NewsBucket.Arn
+            - !Sub "${NewsBucket.Arn}/*"
+        - Effect: Allow
+          Action:
+            - dynamodb:GetItem
+            - dynamodb:PutItem
+            - dynamodb:Query
+          Resource:
+            - !GetAtt AnalysisCacheTable.Arn
+            - !GetAtt ChatSessionsTable.Arn
+        - Effect: Allow
+          Action:
+            - lambda:InvokeFunction
+          Resource:
+            # Avoid circular IAM↔function refs; stage-scoped wildcard is enough for this demo
+            - !Sub "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${self:service}-${self:provider.stage}-*"
+
+custom:
+  pythonRequirements:
+    # Download Lambda-compatible aarch64 wheels on Windows (avoids Docker qemu builds)
+    dockerizePip: false
+    slim: true
+    strip: false
+    layer: false
+    useDownloadCache: true
+    pipCmdExtraArgs:
+      - "--platform=manylinux2014_aarch64"
+      - "--implementation=cp"
+      - "--python-version=3.11"
+      - "--only-binary=:all:"
+    # Runtime already includes boto3; keep package under the 250MB unzipped limit
+    # (AWSSDKPandas managed layer alone pushes code+layer over the cap)
+    noDeploy:
+      - boto3
+      - botocore
+      - s3transfer
+      - jmespath
+
+plugins:
+  - serverless-python-requirements
+
+package:
+  individually: false
+  patterns:
+    - "!node_modules/**"
+    - "!.venv/**"
+    - "!venv/**"
+    - "!**/*.pyc"
+    - "!**/__pycache__/**"
+    - "!package-lock.json"
+    - "!.serverless/**"
+    - "!.env"
+    - "!.env.example"
+
+functions:
+  # Primary public entry — Function URL supports >30s (API Gateway HTTP API cannot)
+  api:
+    handler: handlers.orchestrator.router
+    description: Function URL router for /analyze and /history
+    timeout: 120
+    memorySize: 256
+    url:
+      cors:
+        allowedOrigins:
+          - http://localhost:5173
+          - http://127.0.0.1:5173
+        allowedHeaders:
+          - Content-Type
+          - x-demo-key
+        # Lambda URL CORS auto-handles OPTIONS — do not list it (EarlyValidation fails)
+        allowedMethods:
+          - GET
+          - POST
+    environment:
+      AGENT_NEWS_FUNCTION: !Ref AgentNewsLambdaFunction
+      AGENT_TECHNICAL_FUNCTION: !Ref AgentTechnicalLambdaFunction
+      AGENT_FUNDAMENTAL_FUNCTION: !Ref AgentFundamentalLambdaFunction
+      AGENT_JUDGE_FUNCTION: !Ref AgentJudgeLambdaFunction
+
+  orchestrator:
+    handler: handlers.orchestrator.analyze_handler
+    description: POST /analyze via HTTP API (may hit 30s gateway limit)
+    timeout: 29
+    memorySize: 256
+    environment:
+      AGENT_NEWS_FUNCTION: !Ref AgentNewsLambdaFunction
+      AGENT_TECHNICAL_FUNCTION: !Ref AgentTechnicalLambdaFunction
+      AGENT_FUNDAMENTAL_FUNCTION: !Ref AgentFundamentalLambdaFunction
+      AGENT_JUDGE_FUNCTION: !Ref AgentJudgeLambdaFunction
+    events:
+      - httpApi:
+          path: /analyze
+          method: POST
+
+  history:
+    handler: handlers.orchestrator.history_handler
+    description: GET /history — demo session list
+    timeout: 15
+    memorySize: 256
+    events:
+      - httpApi:
+          path: /history
+          method: GET
+
+  agentNews:
+    handler: handlers.agent_news.handler
+    description: Agent 1 — News RAG (Titan + cosine + Haiku)
+    timeout: 60
+    memorySize: 512
+
+  agentTechnical:
+    handler: handlers.agent_technical.handler
+    description: Agent 2 — Technical (RSI/MACD/EMA via pandas)
+    timeout: 60
+    memorySize: 1024
+
+  agentFundamental:
+    handler: handlers.agent_fundamental.handler
+    description: Agent 3 — Fundamentals via yfinance
+    timeout: 60
+    memorySize: 512
+
+  agentJudge:
+    handler: handlers.agent_judge.handler
+    description: Judge — Claude Sonnet final JSON synthesis
+    timeout: 60
+    memorySize: 256
+
+  ingestNews:
+    handler: handlers.ingest_news.handler
+    description: Weekly news embed → S3 news/{ticker}.json
+    timeout: 900
+    memorySize: 1024
+    environment:
+      INGEST_DELAY_SEC: "2.0"
+    events:
+      - schedule:
+          rate: cron(0 18 ? * SUN *)
+          description: Weekly Sunday news ingestion (18:00 UTC)
+          enabled: true
+
+resources:
+  Resources:
+    NewsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketEncryption:
+          ServerSideEncryptionConfiguration:
+            - ServerSideEncryptionByDefault:
+                SSEAlgorithm: AES256
+        LifecycleConfiguration:
+          Rules:
+            - Id: ExpireOldNewsVersions
+              Status: Enabled
+              Prefix: news/
+              ExpirationInDays: 30
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: true
+          BlockPublicPolicy: true
+          IgnorePublicAcls: true
+          RestrictPublicBuckets: true
+
+    AnalysisCacheTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: ticker
+            AttributeType: S
+          - AttributeName: analysisType
+            AttributeType: S
+        KeySchema:
+          - AttributeName: ticker
+            KeyType: HASH
+          - AttributeName: analysisType
+            KeyType: RANGE
+        TimeToLiveSpecification:
+          AttributeName: expiresAt
+          Enabled: true
+
+    ChatSessionsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: userId
+            AttributeType: S
+          - AttributeName: sessionId#timestamp
+            AttributeType: S
+        KeySchema:
+          - AttributeName: userId
+            KeyType: HASH
+          - AttributeName: sessionId#timestamp
+            KeyType: RANGE
+
+    FrontendBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        WebsiteConfiguration:
+          IndexDocument: index.html
+          ErrorDocument: index.html
+        PublicAccessBlockConfiguration:
+          BlockPublicAcls: false
+          BlockPublicPolicy: false
+          IgnorePublicAcls: false
+          RestrictPublicBuckets: false
+        OwnershipControls:
+          Rules:
+            - ObjectOwnership: ObjectWriter
+
+    FrontendBucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      Properties:
+        Bucket: !Ref FrontendBucket
+        PolicyDocument:
+          Statement:
+            - Sid: PublicReadGetObject
+              Effect: Allow
+              Principal: "*"
+              Action: s3:GetObject
+              Resource: !Sub "${FrontendBucket.Arn}/*"
+
+  Outputs:
+    FrontendWebsiteUrl:
+      Description: S3 static website URL (HTTP)
+      Value: !GetAtt FrontendBucket.WebsiteURL
+    FrontendBucketName:
+      Value: !Ref FrontendBucket
+    NewsBucketName:
+      Value: !Ref NewsBucket

@@ -1,0 +1,14 @@
+{
+  "name": "swingtradeintel-backend",
+  "private": true,
+  "description": "Serverless Framework deploy for AI Swing Trade Assistant",
+  "scripts": {
+    "deploy": "serverless deploy",
+    "remove": "serverless remove",
+    "info": "serverless info"
+  },
+  "devDependencies": {
+    "serverless": "^3.39.0",
+    "serverless-python-requirements": "^6.1.0"
+  }
+}
