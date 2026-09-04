@@ -110,7 +110,7 @@ functions:
   # Primary public entry — Function URL supports >30s (API Gateway HTTP API cannot)
   api:
     handler: handlers.orchestrator.router
-    description: Function URL router for /analyze and /history
+    description: Function URL router — LangGraph analyze + history
     timeout: 120
     memorySize: 256
     url:
@@ -133,7 +133,7 @@ functions:
 
   orchestrator:
     handler: handlers.orchestrator.analyze_handler
-    description: POST /analyze via HTTP API (may hit 30s gateway limit)
+    description: POST /analyze — LangGraph multi-agent pipeline (HTTP API may hit 30s)
     timeout: 29
     memorySize: 256
     environment:

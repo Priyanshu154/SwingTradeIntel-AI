@@ -4,7 +4,7 @@ IaC for this project lives next to the Lambda code:
 
 - [`backend/serverless.yml`](../backend/serverless.yml) — Serverless Framework v3
   - API Gateway HTTP API
-  - 7 Lambdas (orchestrator, history, 3 agents, judge, weekly ingest)
+  - 7 Lambdas (LangGraph orchestrator, history, 3 agents, judge, weekly ingest)
   - DynamoDB `AnalysisCache` + `ChatSessions`
   - S3 news corpus + frontend static website bucket
   - EventBridge Scheduler (Sunday cron)

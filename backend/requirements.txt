@@ -3,3 +3,5 @@
 yfinance>=0.2.40
 pandas>=2.2.0,<3
 numpy>=1.26.0,<3
+langgraph>=0.2.55,<0.4
+langchain-core>=0.3.0,<0.4

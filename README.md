@@ -1,9 +1,10 @@
 # AI Swing Trade Assistant
 
 Portfolio/demo multi-agent serverless RAG app for Nifty 50 swing-trade queries.
-A React SPA calls an API Gateway → Orchestrator Lambda that invokes News, Technical,
-and Fundamental specialist agents, then a Judge agent (Claude Sonnet) returns a
-structured verdict. Weekly EventBridge job embeds ticker news into S3 for hand-rolled RAG.
+A React SPA calls an API Gateway → Orchestrator Lambda that runs a **LangGraph**
+state machine: News, Technical, and Fundamental specialist agents fan out in
+parallel, then a Judge agent synthesizes a structured BUY/SELL/HOLD verdict.
+Weekly EventBridge job embeds ticker news into S3 for hand-rolled RAG.
 
 > Not production auth. The login screen is cosmetic; the only real gate is a shared
 > `x-demo-key` header protecting Bedrock spend on a public resume demo link.
@@ -13,11 +14,11 @@ structured verdict. Weekly EventBridge job embeds ticker news into S3 for hand-r
 ```mermaid
 flowchart TD
   UI["React SPA<br/>S3 static website"] -->|x-demo-key| APIGW["API Gateway HTTP API"]
-  APIGW --> Orch["Orchestrator Lambda"]
-  Orch --> A1["Agent 1 News RAG<br/>Haiku"]
-  Orch --> A2["Agent 2 Technical<br/>Haiku + pandas layer"]
-  Orch --> A3["Agent 3 Fundamental<br/>Haiku"]
-  A1 --> Judge["Judge Agent<br/>Sonnet"]
+  APIGW --> Orch["Orchestrator Lambda<br/>LangGraph StateGraph"]
+  Orch --> A1["news_agent<br/>News RAG"]
+  Orch --> A2["technical_agent<br/>RSI/MACD/EMA"]
+  Orch --> A3["fundamental_agent<br/>yfinance fundamentals"]
+  A1 --> Judge["judge_agent<br/>structured verdict"]
   A2 --> Judge
   A3 --> Judge
   Judge --> DDB["ChatSessions DynamoDB"]
@@ -143,7 +144,15 @@ After adding a payment method in AWS Marketplace / Bedrock model access, you can
 
 Kept cheap on purpose: HTTP API, on-demand DynamoDB, arm64 Lambdas, no NAT, no CloudFront, no Cognito, no managed vector DB. Haiku for specialists, Sonnet only for the Judge. Shared-secret header gates the public demo.
 
-**If this ever needs real traffic, add back in this order:** Step Functions (orchestration reliability) → Cognito (real users) → managed vector store / Bedrock Knowledge Bases.
+**If this ever needs real traffic, add back in this order:** Step Functions (durable orchestration) → Cognito (real users) → managed vector store / Bedrock Knowledge Bases.
+
+## LangGraph orchestration
+
+The analyze path is a compiled `StateGraph` in `backend/shared/analysis_graph.py`:
+
+1. `START` fans out to `news_agent` ∥ `technical_agent` ∥ `fundamental_agent` (each invokes its specialist Lambda).
+2. All three fan in to `judge_agent`, which returns the structured verdict.
+3. Orchestrator persists the result to `ChatSessions` and returns it to the UI.
 
 ## yfinance fragility
 
